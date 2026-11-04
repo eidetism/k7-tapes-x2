@@ -80,8 +80,8 @@ const TEXTS = {
   answerNote: 'кнопка откроет телеграм, сообщение можно поменять перед отправкой',
   telegram: 'eidetism',
   answers: [
-    { text: 'давай в океанариуме обсудим', message: 'прочитала письмо. давай в океанариуме обсудим' }, // новое начало
-    { text: 'мне надо подумать', message: 'прочитала письмо. мне надо немного подумать' }, // новое начало
+    { text: 'давай в океанариуме обсудим', message: 'прочитала письмо. давай в океанариуме обсудим', reply: 'рад это слышать :)' }, // новое начало
+    { text: 'мне надо подумать', message: 'прочитала письмо. мне надо немного подумать', reply: 'хорошо, буду ждать' }, // новое начало
   ],
 };
 
@@ -121,12 +121,13 @@ const FINALE = {
   her: { x: 8, top: 56 },
   me: { x: 35, top: 56, doorTop: SCENE_H - MASCOT.h },
   herBubble: { x: 1, w: 40 },
-  meBubble: { x: 42, w: 30 },
+  meBubble: { x: 42, w: 34 },
 };
 const FINALE_LOCK = -1; /* в финале полки больше не открываются */
 const SPOT_LINE_MS = 4500;
 /* Предметы в зале, на которые можно нажать */
 const SPOTS = [{ label: 'цветок', line: 'flower', x: 7, top: 103, w: 12, h: 15 }];
+const REPLY_BEFORE_CHAT_MS = 2000;
 const FINALE_LINE_DELAY_MS = 350;
 const FINALE_CHOICE_DELAY_MS = 1500;
 /* Ряды листа спрайтов mascot.png: 4 кадра в каждом */
@@ -864,6 +865,25 @@ function makeBubble(className, spot, speakerX) {
   return node;
 }
 
+let meLine = null;
+let chatTimer = null;
+let chosenLink = null;
+
+function openChat(url) {
+  window.location.href = url;
+}
+
+/* Сначала твой ответ, потом чат. Повторное нажатие на ту же кнопку
+   открывает чат сразу: пригодится, если переход не сработал сам. */
+function chooseAnswer(event, item, link) {
+  clearTimeout(chatTimer);
+  if (chosenLink === link) return;
+  event.preventDefault();
+  chosenLink = link;
+  typeInto(meLine, item.reply);
+  chatTimer = setTimeout(() => openChat(link.href), REPLY_BEFORE_CHAT_MS);
+}
+
 /* Первое закрытие письма запускает финал, дальше конверт просто открывает его снова */
 function closeLetter() {
   if (placeBubbles) letter.hidden = true;
@@ -923,6 +943,7 @@ function showFinale() {
 
   setTimeout(() => {
     const line = makeBubble('bubble--me', FINALE.meBubble, FINALE.me.x + MASCOT.w / 2);
+    meLine = line;
     bubbles.push({ node: line, top: FINALE.me.top });
     placeBubbles();
     typeInto(line, TEXTS.myLine);
@@ -936,6 +957,7 @@ function showFinale() {
       link.href = `https://t.me/${TEXTS.telegram}?text=${encodeURIComponent(item.message)}`;
       link.target = '_blank';
       link.rel = 'noopener';
+      link.addEventListener('click', (event) => chooseAnswer(event, item, link));
       answers.append(link);
     });
     choice.append(answers);
