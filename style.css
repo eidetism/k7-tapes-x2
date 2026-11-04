@@ -288,3 +288,43 @@ canvas { display: block; image-rendering: pixelated; }
 @media (prefers-reduced-motion: reduce) {
   .box.is-shaking, .pointer, .sparkle { animation: none; }
 }
+
+/* финал: ты и она в зале */
+
+.box[hidden] { display: none; }
+
+.me {
+  position: absolute;
+  pointer-events: none;
+  transition: top 0s linear;
+  background-size: 400% 400%;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+}
+
+
+.bubble {
+  position: absolute;
+  z-index: 2;
+  padding: 8px 10px;
+  border: 4px solid var(--white);
+  background: #000;
+}
+
+.bubble::after {
+  content: "";
+  position: absolute;
+  left: var(--tail, 12px);
+  bottom: -14px;
+  width: 10px;
+  height: 10px;
+  background: var(--white);
+}
+
+.bubble--me { font-size: 22px; text-align: center; }
+
+.bubble--her .answers { grid-template-columns: minmax(0, 1fr); }
+.bubble--her .answers .action { min-height: 48px; padding: 6px 4px; font-size: 17px; line-height: 1.12; }
+
+.scene, .box { -webkit-user-select: none; user-select: none; }
+.password input { -webkit-user-select: text; user-select: text; }

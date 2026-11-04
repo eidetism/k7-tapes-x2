@@ -74,6 +74,8 @@ const TEXTS = {
 вживую я бы хуй че нормально сказал, великий и могучий русский язык меня мальца подводит.
 
 так что дай мне ответ взаимно ли это, чтобы я не сидел и не ждал у моря погоды`,
+  closeLetter: 'закрыть письмо', // новое
+  myLine: '...?', // новое
   answerNote: 'кнопка откроет телеграм, сообщение можно поменять перед отправкой',
   telegram: 'eidetism',
   answers: [
@@ -111,11 +113,21 @@ const SHELF_W = 14;
 const SHELF_TOP = 12;
 const SHELF_H = 30;
 const MASCOT = { w: 18, h: 27, top: SHELF_TOP + SHELF_H + 2 };
+/* Финал: где стоят герои и где лежат облачка, в пикселях сцены */
+const ME_FILE = 'me-walk.png';
+const FINALE = {
+  her: { x: 8, top: 56 },
+  me: { x: 35, top: 56, doorTop: SCENE_H - MASCOT.h },
+  herBubble: { x: 1, w: 40 },
+  meBubble: { x: 42, w: 30 },
+};
+const FINALE_LINE_DELAY_MS = 350;
+const FINALE_CHOICE_DELAY_MS = 1500;
 /* Ряды листа спрайтов mascot.png: 4 кадра в каждом */
 const FACING = { down: 0, left: 1, right: 2, up: 3 };
 const WALK_MS_PER_PIXEL = 45;
 const WALK_FRAME_MS = 130;
-const TABLE_ENVELOPE = { x: 58, bottom: 92, w: 22, h: 14 };
+const TABLE_ENVELOPE = { x: 59, bottom: 102, w: 22, h: 14 };
 
 const scene = document.getElementById('scene');
 const box = document.getElementById('box');
@@ -273,14 +285,14 @@ function drawHall(ctx) {
   rect(ctx, 8, 106, 8, 3, '#5f9338');
 
   /* ковёр и стол */
-  rect(ctx, 50, 78, 34, 34, '#b2384b');
-  rect(ctx, 52, 80, 30, 30, '#d76176');
-  for (let x = 54; x < 80; x += 6) rect(ctx, x, 104, 3, 3, '#b2384b');
-  rect(ctx, 54, 82, 26, 14, OUTLINE);
-  rect(ctx, 55, 82, 24, 10, '#f07d24');
-  rect(ctx, 55, 92, 24, 3, '#7a3d16');
-  rect(ctx, 56, 95, 3, 3, OUTLINE);
-  rect(ctx, 75, 95, 3, 3, OUTLINE);
+  rect(ctx, 55, 88, 29, 34, '#b2384b');
+  rect(ctx, 57, 90, 25, 30, '#d76176');
+  for (let x = 59; x < 80; x += 5) rect(ctx, x, 114, 3, 3, '#b2384b');
+  rect(ctx, 58, 92, 23, 14, OUTLINE);
+  rect(ctx, 59, 92, 21, 10, '#f07d24');
+  rect(ctx, 59, 102, 21, 3, '#7a3d16');
+  rect(ctx, 60, 105, 3, 3, OUTLINE);
+  rect(ctx, 76, 105, 3, 3, OUTLINE);
 
   /* выход внизу */
   rect(ctx, 34, SCENE_H - 18, 20, 18, '#f0bd80');
@@ -397,6 +409,7 @@ function layout() {
   scene.style.width = `${SCENE_W * scale}px`;
   scene.style.height = `${SCENE_H * scale}px`;
   sprites.forEach(place);
+  if (placeBubbles) placeBubbles();
   const big = Math.max(4, Math.floor(Math.min(window.innerWidth - 32, 400) / 34));
   bigEnvelope.style.width = `${34 * big}px`;
   bigEnvelope.style.height = `${36 * big}px`;
@@ -626,8 +639,12 @@ function showHall() {
   showLine(TEXTS.idle);
 }
 
+function setSpriteFrame(node, row, column) {
+  node.style.backgroundPosition = `${(column / 3) * 100}% ${(row / 3) * 100}%`;
+}
+
 function setMascotFrame(row, column) {
-  mascotNode.style.backgroundPosition = `${(column / 3) * 100}% ${(row / 3) * 100}%`;
+  setSpriteFrame(mascotNode, row, column);
 }
 
 let walkTimer = null;
@@ -784,10 +801,93 @@ function openLetter() {
   }, 1250);
 }
 
+/* Финал: письмо закрыто, появляешься ты, над её головой выбор */
+
+let placeBubbles = null;
+
+function makeBubble(className, spot, speakerX) {
+  const node = el('div', `bubble ${className}`);
+  node.dataset.x = spot.x;
+  node.dataset.w = spot.w;
+  node.dataset.tail = speakerX;
+  scene.append(node);
+  return node;
+}
+
+function showFinale() {
+  letter.hidden = true;
+  mail.hidden = true;
+  box.hidden = true;
+  activeBook = -1; /* полки больше не открываются */
+  TABLE_ENVELOPE.sprite.node.classList.remove('is-here');
+
+  const her = sprites.find((item) => item.node === mascotNode);
+  clearInterval(walkTimer);
+  mascotNode.style.transitionDuration = '0ms';
+  her.x = FINALE.her.x;
+  her.top = FINALE.her.top;
+  place(her);
+  setMascotFrame(FACING.right, 0);
+
+  /* Ты входишь в дверь, идёшь вверх по залу и поворачиваешься к ней */
+  const meNode = el('div', 'me');
+  meNode.style.backgroundImage = `url(${ME_FILE})`;
+  const me = addSprite({ node: meNode, x: FINALE.me.x, top: FINALE.me.doorTop, w: MASCOT.w, h: MASCOT.h });
+  const walkMs = (FINALE.me.doorTop - FINALE.me.top) * WALK_MS_PER_PIXEL;
+  let column = 0;
+  setSpriteFrame(meNode, FACING.up, column);
+  const steps = setInterval(() => {
+    column = (column + 1) % 4;
+    setSpriteFrame(meNode, FACING.up, column);
+  }, WALK_FRAME_MS);
+  void meNode.offsetWidth;
+  meNode.style.transitionDuration = `${walkMs}ms`;
+  me.top = FINALE.me.top;
+  place(me);
+  setTimeout(() => {
+    clearInterval(steps);
+    setSpriteFrame(meNode, FACING.left, 0);
+  }, walkMs);
+
+  const bubbles = [];
+  placeBubbles = () => {
+    bubbles.forEach(({ node, top }) => {
+      node.style.left = `${node.dataset.x * scale}px`;
+      node.style.width = `${node.dataset.w * scale}px`;
+      node.style.bottom = `${(SCENE_H - top) * scale + 14}px`;
+      node.style.setProperty('--tail', `${(node.dataset.tail - node.dataset.x) * scale}px`);
+    });
+  };
+
+  setTimeout(() => {
+    const line = makeBubble('bubble--me', FINALE.meBubble, FINALE.me.x + MASCOT.w / 2);
+    bubbles.push({ node: line, top: FINALE.me.top });
+    placeBubbles();
+    typeInto(line, TEXTS.myLine);
+  }, walkMs + FINALE_LINE_DELAY_MS);
+
+  setTimeout(() => {
+    const choice = makeBubble('bubble--her', FINALE.herBubble, FINALE.her.x + MASCOT.w / 2);
+    const answers = el('div', 'answers');
+    TEXTS.answers.forEach((item) => {
+      const link = el('a', 'action', item.text);
+      link.href = `https://t.me/${TEXTS.telegram}?text=${encodeURIComponent(item.message)}`;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      answers.append(link);
+    });
+    choice.append(answers);
+    bubbles.push({ node: choice, top: FINALE.her.top });
+    placeBubbles();
+    box.hidden = false;
+    showLine(TEXTS.answerNote);
+  }, walkMs + FINALE_LINE_DELAY_MS + FINALE_CHOICE_DELAY_MS);
+}
+
 function typeLetter() {
   const typed = document.getElementById('typed');
   const rest = document.getElementById('rest');
-  const answers = document.getElementById('answers');
+  const letterEnd = document.getElementById('letterEnd');
   const text = TEXTS.letter;
   rest.textContent = text;
   let position = 0;
@@ -802,7 +902,7 @@ function typeLetter() {
     clearTimeout(timer);
     typed.textContent = text;
     rest.textContent = '';
-    answers.classList.remove('is-pending');
+    letterEnd.classList.remove('is-pending');
     letter.removeEventListener('click', revealAll);
     letter.removeEventListener('touchmove', stopFollowing);
     letter.removeEventListener('wheel', stopFollowing);
@@ -886,15 +986,8 @@ portraitPicture.src = PORTRAIT_FILE;
 
 openEnvelope.textContent = TEXTS.openEnvelope;
 openEnvelope.addEventListener('click', openLetter);
-document.getElementById('answerNote').textContent = TEXTS.answerNote;
-
-TEXTS.answers.forEach((item) => {
-  const link = el('a', 'action', item.text);
-  link.href = `https://t.me/${TEXTS.telegram}?text=${encodeURIComponent(item.message)}`;
-  link.target = '_blank';
-  link.rel = 'noopener';
-  document.getElementById('answers').append(link);
-});
+document.getElementById('letterEnd').append(button(TEXTS.closeLetter, 'action', showFinale));
+new Image().src = ME_FILE; /* заранее, чтобы фигурка не мигнула при появлении */
 
 window.addEventListener('resize', layout);
 layout();
