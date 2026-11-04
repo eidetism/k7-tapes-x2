@@ -92,6 +92,9 @@ const PORTRAIT_FILE = 'portrait.png';
 const SONG_VOLUME = 0.35;
 const SONG_FADE_MS = 1500;
 const SONG_FADE_OUT_S = 4;
+const SONG_FINAL_FILE = 'song-final.mp3';
+const SONG_FINAL_VOLUME = 0.12;
+const SONG_SWITCH_MS = 1500;
 const BLIP_PITCH = 520;
 const BLIP_VOLUME = 0.035;
 const BLIP_VOLUME_LETTER = 0.012;
@@ -876,6 +879,7 @@ function chooseAnswer(event, item, link) {
   if (chosenLink === link) return;
   event.preventDefault();
   chosenLink = link;
+  fadeAudio(finalSong, 0, REPLY_BEFORE_CHAT_MS);
   typeInto(meLine, item.reply);
   chatTimer = setTimeout(() => openChat(link.href), REPLY_BEFORE_CHAT_MS);
 }
@@ -898,6 +902,7 @@ function showFinale() {
   box.hidden = true;
   clearTimeout(spotTimer);
   soundToggle.classList.add('is-left');
+  startFinalSong();
   setMascotFrame(FACING.left, 0);
 
   /* Ты входишь в дверь, идёшь вверх по залу и поворачиваешься к ней */
@@ -1035,8 +1040,42 @@ function startSong() {
   /* Один проигрыш: в конце затихает */
   song.addEventListener('timeupdate', () => {
     const left = song.duration - song.currentTime;
-    if (left < SONG_FADE_OUT_S) song.volume = Math.max(0, (left / SONG_FADE_OUT_S) * SONG_VOLUME);
+    if (!songLeaving && left < SONG_FADE_OUT_S) {
+      song.volume = Math.max(0, (left / SONG_FADE_OUT_S) * SONG_VOLUME);
+    }
   });
+}
+
+let songLeaving = false;
+let finalSong = null;
+
+function fadeAudio(audio, target, ms, onDone) {
+  const from = audio.volume;
+  const started = performance.now();
+  const fade = setInterval(() => {
+    const progress = Math.min(1, (performance.now() - started) / ms);
+    audio.volume = from + (target - from) * progress;
+    if (progress === 1) {
+      clearInterval(fade);
+      if (onDone) onDone();
+    }
+  }, 60);
+}
+
+/* Первая песня уступает место тихому фону, пока Ксюша выбирает ответ.
+   Запускается от нажатия на «закрыть письмо», иначе телефон её заблокирует. */
+function startFinalSong() {
+  if (song && !song.ended) {
+    songLeaving = true;
+    fadeAudio(song, 0, SONG_SWITCH_MS, () => song.pause());
+  }
+  finalSong = new Audio(SONG_FINAL_FILE);
+  finalSong.loop = true;
+  finalSong.volume = 0;
+  finalSong.muted = soundMuted;
+  const playing = finalSong.play();
+  if (playing) playing.catch(() => {});
+  fadeAudio(finalSong, SONG_FINAL_VOLUME, SONG_SWITCH_MS);
 }
 
 soundToggle.textContent = TEXTS.soundOn;
@@ -1044,6 +1083,7 @@ soundToggle.hidden = false;
 soundToggle.addEventListener('click', () => {
   soundMuted = !soundMuted;
   if (song) song.muted = soundMuted;
+  if (finalSong) finalSong.muted = soundMuted;
   soundToggle.textContent = soundMuted ? TEXTS.soundOff : TEXTS.soundOn;
 });
 
