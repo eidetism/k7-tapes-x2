@@ -118,10 +118,10 @@ const MASCOT = { w: 18, h: 27, top: SHELF_TOP + SHELF_H + 2 };
 /* Финал: где стоят герои и где лежат облачка, в пикселях сцены */
 const ME_FILE = 'me-walk.png';
 const FINALE = {
-  her: { x: 8, top: 56 },
+  her: { x: 60, top: 56 },
   me: { x: 35, top: 56, doorTop: SCENE_H - MASCOT.h },
-  herBubble: { x: 1, w: 40 },
-  meBubble: { x: 42, w: 34 },
+  herBubble: { x: 47, w: 40 },
+  meBubble: { x: 11, w: 34 },
 };
 const FINALE_LOCK = -1; /* в финале полки больше не открываются */
 const SPOT_LINE_MS = 4500;
@@ -643,13 +643,8 @@ function showHall() {
   });
 
   envelopeNode.addEventListener('click', () => {
-    if (placeBubbles) {
-      reopenLetter();
-      return;
-    }
-    mail.hidden = false;
-    drawBigEnvelope(bigEnvelope.getContext('2d'), 0);
-    openEnvelope.focus({ preventScroll: true });
+    if (placeBubbles) reopenLetter();
+    else if (!envelopeTaken) walkToEnvelope();
   });
   TABLE_ENVELOPE.sprite = addSprite({
     node: envelopeNode,
@@ -671,35 +666,61 @@ function setMascotFrame(row, column) {
 }
 
 let walkTimer = null;
+let walkEnd = null;
+let envelopeTaken = false;
 
-/* Идёт к полке, по дороге перебирая кадры, и поворачивается к книгам */
-function moveMascotTo(shelf) {
+/* Ведёт Ксюшу по отрезкам пути, каждый только по x или только по top, перебирая кадры */
+function walkMascot(legs, onArrive) {
   const sprite = sprites.find((item) => item.node === mascotNode);
-  const target = shelf.x + Math.floor((SHELF_W - MASCOT.w) / 2);
-  const distance = target - sprite.x;
   clearInterval(walkTimer);
+  clearTimeout(walkEnd);
 
-  if (distance === 0) {
-    setMascotFrame(FACING.up, 0);
+  const [leg, ...others] = legs;
+  if (!leg) {
+    onArrive();
     return;
   }
 
-  const duration = Math.abs(distance) * WALK_MS_PER_PIXEL;
-  const row = distance < 0 ? FACING.left : FACING.right;
+  const dx = leg.x === undefined ? 0 : leg.x - sprite.x;
+  const dy = leg.top === undefined ? 0 : leg.top - sprite.top;
+  if (dx === 0 && dy === 0) {
+    walkMascot(others, onArrive);
+    return;
+  }
+
+  const duration = (Math.abs(dx) + Math.abs(dy)) * WALK_MS_PER_PIXEL;
+  let row = dy < 0 ? FACING.up : FACING.down;
+  if (dx !== 0) row = dx < 0 ? FACING.left : FACING.right;
   let column = 0;
   setMascotFrame(row, column);
   walkTimer = setInterval(() => {
     column = (column + 1) % 4;
     setMascotFrame(row, column);
   }, WALK_FRAME_MS);
-  setTimeout(() => {
-    clearInterval(walkTimer);
-    setMascotFrame(FACING.up, 0);
-  }, duration);
+  walkEnd = setTimeout(() => walkMascot(others, onArrive), duration);
 
   mascotNode.style.transitionDuration = `${duration}ms`;
-  sprite.x = target;
+  sprite.x += dx;
+  sprite.top += dy;
   place(sprite);
+}
+
+/* Идёт к полке и поворачивается к книгам */
+function moveMascotTo(shelf) {
+  const x = shelf.x + Math.floor((SHELF_W - MASCOT.w) / 2);
+  walkMascot([{ x }], () => setMascotFrame(FACING.up, 0));
+}
+
+/* Идёт к столу, и только там открывается конверт */
+function walkToEnvelope() {
+  envelopeTaken = true;
+  activeBook = FINALE_LOCK;
+  walkMascot([{ x: FINALE.her.x }, { top: FINALE.her.top }], () => {
+    setMascotFrame(FACING.down, 0);
+    mail.hidden = false;
+    drawBigEnvelope(bigEnvelope.getContext('2d'), 0);
+    openEnvelope.focus({ preventScroll: true });
+  });
 }
 
 function openBook(index) {
@@ -876,15 +897,8 @@ function showFinale() {
   mail.hidden = true;
   box.hidden = true;
   clearTimeout(spotTimer);
-  activeBook = FINALE_LOCK;
-
-  const her = sprites.find((item) => item.node === mascotNode);
-  clearInterval(walkTimer);
-  mascotNode.style.transitionDuration = '0ms';
-  her.x = FINALE.her.x;
-  her.top = FINALE.her.top;
-  place(her);
-  setMascotFrame(FACING.right, 0);
+  soundToggle.classList.add('is-left');
+  setMascotFrame(FACING.left, 0);
 
   /* Ты входишь в дверь, идёшь вверх по залу и поворачиваешься к ней */
   const meNode = el('div', 'me');
@@ -903,7 +917,7 @@ function showFinale() {
   place(me);
   setTimeout(() => {
     clearInterval(steps);
-    setSpriteFrame(meNode, FACING.left, 0);
+    setSpriteFrame(meNode, FACING.right, 0);
   }, walkMs);
 
   const bubbles = [];
