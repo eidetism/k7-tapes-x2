@@ -56,10 +56,10 @@ const TEXTS = {
       question: 'какой фильм тебе вообще не понравился?',
       mustPickRight: true,
       options: [
-        { text: 'сумерки', reply: 'врёшь. запись не обманешь' },
-        { text: 'репортаж', reply: 'врёшь. запись не обманешь' },
+        { text: 'сумерки', reply: 'врёшь. книга не обманет' },
+        { text: 'репортаж', reply: 'врёшь. книга не обманет' },
         { text: 'синистер', reply: 'скоро закину все отзывы европейцев, чтобы ты их хуями покрыла', right: true },
-        { text: 'каникулы', reply: 'врёшь. запись не обманешь' },
+        { text: 'каникулы', reply: 'врёшь. книга не обманет' },
       ],
     },
   ],
@@ -74,6 +74,7 @@ const TEXTS = {
 вживую я бы хуй че нормально сказал, великий и могучий русский язык меня мальца подводит.
 
 так что дай мне ответ взаимно ли это, чтобы я не сидел и не ждал у моря погоды`,
+  flower: 'цветок. для тебя что угодно, только не розы',
   closeLetter: 'закрыть письмо', // новое
   myLine: '...?', // новое
   answerNote: 'кнопка откроет телеграм, сообщение можно поменять перед отправкой',
@@ -95,6 +96,7 @@ const BLIP_PITCH = 520;
 const BLIP_VOLUME = 0.035;
 const BLIP_VOLUME_LETTER = 0.012;
 const CLICK_VOLUME = 0.07;
+const ENVELOPE_LAND_MS = 420;
 
 const SCENE_W = 88;
 const SCENE_H = 140;
@@ -121,6 +123,10 @@ const FINALE = {
   herBubble: { x: 1, w: 40 },
   meBubble: { x: 42, w: 30 },
 };
+const FINALE_LOCK = -1; /* в финале полки больше не открываются */
+const SPOT_LINE_MS = 4500;
+/* Предметы в зале, на которые можно нажать */
+const SPOTS = [{ label: 'цветок', line: 'flower', x: 7, top: 103, w: 12, h: 15 }];
 const FINALE_LINE_DELAY_MS = 350;
 const FINALE_CHOICE_DELAY_MS = 1500;
 /* Ряды листа спрайтов mascot.png: 4 кадра в каждом */
@@ -474,6 +480,17 @@ function playWrong() {
   beep(190, 90, 220, CLICK_VOLUME);
 }
 
+/* Глухой стук книги о полку, чуть позже звука нажатия */
+function playBookBack() {
+  setTimeout(() => beep(170, 110, 80, CLICK_VOLUME), 70);
+}
+
+/* Конверт падает со свистом и стукается о стол в момент приземления */
+function playEnvelopeDrop() {
+  beep(760, 240, ENVELOPE_LAND_MS, CLICK_VOLUME * 0.6);
+  setTimeout(() => beep(150, 90, 90, CLICK_VOLUME), ENVELOPE_LAND_MS);
+}
+
 document.addEventListener('pointerdown', unlockSound, true);
 document.addEventListener('keydown', unlockSound, true);
 document.addEventListener('click', (event) => {
@@ -517,10 +534,28 @@ box.addEventListener('click', (event) => {
   if (skipTyping && !event.target.closest('button, input')) skipTyping();
 });
 
-function showLine(text) {
+function renderLine(text) {
   const line = el('p', 'box__text');
   box.replaceChildren(line);
   typeInto(line, `* ${text}`);
+}
+
+/* idleLine: обычная подпись, к которой возвращается окно после реплик предметов */
+let idleLine = '';
+let spotTimer = null;
+
+function showLine(text) {
+  idleLine = text;
+  clearTimeout(spotTimer);
+  renderLine(text);
+}
+
+function showSpotLine(text) {
+  const bookIsOpen = activeBook !== null && activeBook !== FINALE_LOCK;
+  if (box.hidden || bookIsOpen) return;
+  clearTimeout(spotTimer);
+  renderLine(text);
+  spotTimer = setTimeout(() => renderLine(idleLine), SPOT_LINE_MS);
 }
 
 /* Заставка: улица */
@@ -623,7 +658,19 @@ function showHall() {
   envelopeNode.type = 'button';
   envelopeNode.setAttribute('aria-label', 'конверт');
   envelopeNode.append(envelopeCanvas);
+  SPOTS.forEach((spot) => {
+    const node = el('button', 'sprite');
+    node.type = 'button';
+    node.setAttribute('aria-label', spot.label);
+    node.addEventListener('click', () => showSpotLine(TEXTS[spot.line]));
+    addSprite({ node, x: spot.x, top: spot.top, w: spot.w, h: spot.h });
+  });
+
   envelopeNode.addEventListener('click', () => {
+    if (placeBubbles) {
+      reopenLetter();
+      return;
+    }
     mail.hidden = false;
     drawBigEnvelope(bigEnvelope.getContext('2d'), 0);
     openEnvelope.focus({ preventScroll: true });
@@ -682,6 +729,7 @@ function moveMascotTo(shelf) {
 function openBook(index) {
   if (activeBook !== null) return;
   activeBook = index;
+  clearTimeout(spotTimer);
   const item = TEXTS.volumes[index];
   moveMascotTo(SHELVES[index]);
 
@@ -761,6 +809,7 @@ function closeBook() {
   const ctx = shelf.sprite.node.querySelector('canvas').getContext('2d');
   drawShelf(ctx, shelf, true);
   setMascotFrame(FACING.down, 0);
+  playBookBack();
 
   if (readBooks.size === SHELVES.length) {
     dropEnvelope();
@@ -773,6 +822,7 @@ function closeBook() {
 function dropEnvelope() {
   const node = TABLE_ENVELOPE.sprite.node;
   node.classList.add('is-here');
+  playEnvelopeDrop();
   node.animate(
     [
       { transform: `translateY(${-40 * scale}px)` },
@@ -814,12 +864,24 @@ function makeBubble(className, spot, speakerX) {
   return node;
 }
 
+/* Первое закрытие письма запускает финал, дальше конверт просто открывает его снова */
+function closeLetter() {
+  if (placeBubbles) letter.hidden = true;
+  else showFinale();
+}
+
+function reopenLetter() {
+  letter.hidden = false;
+  letter.scrollTop = 0;
+  letter.focus({ preventScroll: true });
+}
+
 function showFinale() {
   letter.hidden = true;
   mail.hidden = true;
   box.hidden = true;
-  activeBook = -1; /* полки больше не открываются */
-  TABLE_ENVELOPE.sprite.node.classList.remove('is-here');
+  clearTimeout(spotTimer);
+  activeBook = FINALE_LOCK;
 
   const her = sprites.find((item) => item.node === mascotNode);
   clearInterval(walkTimer);
@@ -986,7 +1048,7 @@ portraitPicture.src = PORTRAIT_FILE;
 
 openEnvelope.textContent = TEXTS.openEnvelope;
 openEnvelope.addEventListener('click', openLetter);
-document.getElementById('letterEnd').append(button(TEXTS.closeLetter, 'action', showFinale));
+document.getElementById('letterEnd').append(button(TEXTS.closeLetter, 'action', closeLetter));
 new Image().src = ME_FILE; /* заранее, чтобы фигурка не мигнула при появлении */
 
 window.addEventListener('resize', layout);
