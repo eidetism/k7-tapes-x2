@@ -322,22 +322,6 @@ function drawShelf(ctx, shelf, isRead) {
   if (isRead) rect(ctx, 6, 19, 3, 9, '#3d200e');
 }
 
-/* Пока нет настоящего рисунка: условная фигурка */
-function drawPlaceholderMascot(ctx) {
-  rect(ctx, 5, 2, 8, 9, '#2b1a14');
-  rect(ctx, 6, 4, 6, 6, '#f6c9a4');
-  rect(ctx, 7, 7, 1, 1, '#000');
-  rect(ctx, 10, 7, 1, 1, '#000');
-  rect(ctx, 4, 4, 2, 9, '#2b1a14');
-  rect(ctx, 12, 4, 2, 9, '#2b1a14');
-  rect(ctx, 6, 11, 6, 8, '#4f6bd8');
-  rect(ctx, 5, 12, 1, 6, '#f6c9a4');
-  rect(ctx, 12, 12, 1, 6, '#f6c9a4');
-  rect(ctx, 6, 19, 6, 5, '#2b2b3a');
-  rect(ctx, 6, 24, 2, 2, '#fff');
-  rect(ctx, 10, 24, 2, 2, '#fff');
-}
-
 function drawSmallEnvelope(ctx) {
   rect(ctx, 0, 0, 22, 14, OUTLINE);
   rect(ctx, 1, 1, 20, 12, '#efe3bd');
@@ -639,19 +623,10 @@ function showHall() {
     shelf.sprite = addSprite({ node, x: shelf.x, top: SHELF_TOP, w: SHELF_W, h: SHELF_H });
   });
 
-  const canvas = pixelCanvas(MASCOT.w, MASCOT.h);
-  drawPlaceholderMascot(canvas.getContext('2d'));
   mascotNode = el('div', 'mascot');
-  mascotNode.append(canvas);
+  mascotNode.style.backgroundImage = `url(${MASCOT_FILE})`;
+  setMascotFrame(FACING.down, 0);
   addSprite({ node: mascotNode, x: 34, top: MASCOT.top, w: MASCOT.w, h: MASCOT.h });
-
-  const picture = new Image();
-  picture.onload = () => {
-    mascotNode.replaceChildren();
-    mascotNode.style.backgroundImage = `url(${MASCOT_FILE})`;
-    setMascotFrame(FACING.down, 0);
-  };
-  picture.src = MASCOT_FILE;
 
   const envelopeCanvas = pixelCanvas(TABLE_ENVELOPE.w, TABLE_ENVELOPE.h);
   drawSmallEnvelope(envelopeCanvas.getContext('2d'));
@@ -1071,7 +1046,8 @@ portraitPicture.src = PORTRAIT_FILE;
 openEnvelope.textContent = TEXTS.openEnvelope;
 openEnvelope.addEventListener('click', openLetter);
 document.getElementById('letterEnd').append(button(TEXTS.closeLetter, 'action', closeLetter));
-new Image().src = ME_FILE; /* заранее, чтобы фигурка не мигнула при появлении */
+/* Заранее, чтобы фигурки не появлялись с задержкой */
+[MASCOT_FILE, ME_FILE].forEach((file) => { new Image().src = file; });
 
 window.addEventListener('resize', layout);
 layout();
